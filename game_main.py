@@ -38,18 +38,23 @@ class instance():
         self.state_reserved = STATE_IDLE
         
         self.controller = controller # negative value for manual controll
-        self.print_message(mode = 0)
+        self.print_message("CREATED",1)
+        self.print_info(mode = 0)
     
+    def __del__(self):
+        self.print_message("DELETED",1)
+
     def is_alive(self):
         return True if self.hp > 0 else False
 
-    def print_message(self, msg = "", mode = 1):
-        if not CONFIG_DEBUG_INSTANCE:
-            return None
+
+    def print_info(self, mode = 0):
         if mode == 0:
-            print("Inst.%d: Created with controller id %d"%(self.idx, self.controller))
+            print("    idx:%d, Controller:%d"%(self.idx, self.controller))
             print("    hp:%5d/%5d, dmg:%5d,%1.3f,%1.3f"%(self.hp, self.hp_max, self.dmg_base, self.dmg_coef_hp, self.dmg_coef_reflect))
-        elif mode == 1:
+
+    def print_message(self, msg = "", lv = 0):
+        if CONFIG_DEBUG_INSTANCE == 0 or CONFIG_DEBUG_INSTANCE >= lv:
             print("Inst.%d: %s"%(self.idx,msg))
 
     def execute_turn(self):
@@ -69,7 +74,7 @@ class instance():
         # Wall checking
         if target[0] < 0 or target[0] >= area_w or target[1] < 0 or target[1] >= area_h:
             isMoveAvailable = False
-            self.print_message("MOVE CANCELLED by WALL")
+            self.print_message("MOVE CANCELLED by WALL", 3)
         # Object colliding
         else:
             for inst in instances:
@@ -77,7 +82,7 @@ class instance():
                     isMoveAvailable = False
                     isAttack = True
                     attackTarget = inst
-                    self.print_message("MOVE CANCELLED by OBJ")
+                    self.print_message("MOVE CANCELLED by OBJ", 3)
                     break
         
         # Move to target position
@@ -88,6 +93,10 @@ class instance():
         elif isAttack:
             attackTarget.hp -= int(self.hp*self.dmg_coef_hp)
             self.hp -= int(attackTarget.hp*self.dmg_coef_hp*self.dmg_coef_reflect)
+        
+        if not self.is_alive():
+            return None
+        
         # Gain resource
         self.hp+=area_resource[self.x,self.y]
         area_resource[self.x,self.y] = 0
@@ -104,12 +113,14 @@ class instance():
         elif self.hp <= 0:
             self.hp = 0 # Death
         
-
+def print_debug_main(msg ="", lv = 0):
+    if CONFIG_DEBUG_MAIN == 0 or CONFIG_DEBUG_MAIN >= lv:
+        print("Main:",msg)
 
 def spawn_resource_basic():
     for x in range(area_w):
         for y in range(area_h):
-            if np.random.rand()<0.1:
+            if np.random.rand()<CONFIG_RESOURCE_SPAWN_RATE:
                 area_resource[x,y] += 1
 
 
@@ -135,22 +146,36 @@ def game_init():
         instances.append(inst)
         controlidx += 1
 
-
-def execute_turn():
+def execute_turn():  
     # Call global turn as global
-    global global_turn
+    global global_turn, instances, global_player_idx
+    print_debug_main("Turn %d: Initiated"%(global_turn),1)
 
     # Shuffle order
+    print_debug_main("Turn %d: Order shuffled"%(global_turn),3)
     order = []
     for i in range(len(instances)):
         order.append(i)
     random.shuffle(order)
     
-    # Execute turn
+    # Execute instance turn
+    print_debug_main("Turn %d: Execute instance turn"%(global_turn),3)
     for instidx in order:
         instances[instidx].execute_turn()
     
+    # Delete instances
+    print_debug_main("Turn %d: Instance death"%(global_turn),3)
+    instances_new = []
+    for inst in instances:
+        if inst.hp > 0: instances_new.append(inst)
+        else:
+            if inst.controller < 0:
+                global_player_idx = -1
+            del inst
+    instances = instances_new
+
     # Spawn resources
+    print_debug_main("Turn %d: Spawn Resources"%(global_turn),3)
     if CONFIG_RESOURCE_SPAWN_METHOD == 0:
         spawn_resource_basic()
     
@@ -171,28 +196,39 @@ def assign_state():
         inst.state_reserved = random.choice([STATE_IDLE, STATE_MOVL, STATE_MOVR, STATE_MOVU, STATE_MOVD])
 
 if __name__ == "__main__":
-    if CONFIG_DEBUG_INSTANCE:
-        print("Debug for instance is on")
-    
+    print("="*50)
+    print("Debug message level")
+    if CONFIG_DEBUG_MAIN >= 0:
+        print("    Global:", CONFIG_DEBUG_MAIN)
+    if CONFIG_DEBUG_INSTANCE >= 0:
+        print("    Instance:", CONFIG_DEBUG_INSTANCE)
+    print("="*50)
+    print_config()
+    print("="*50)
+
+    # init pygame
     pg.init()
     
+    # define game area
     size = [cell_w*area_w, cell_h*area_h+40]
     scr = pg.display.set_mode(size)
 
+    # set basic fonts
     f_b20 = pg.font.SysFont("comicsansms", 20)
     f_b12 = pg.font.SysFont("comicsansms", 12)
 
     pg.display.set_caption("Simulation")
 
-    
     done = False
     clock = pg.time.Clock()
     
+    # initialize game
     game_init()
 
     while not done:
         clock.tick(60)
         turn_passed = False
+        # keydown event handling
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 done = True
@@ -201,28 +237,33 @@ if __name__ == "__main__":
             if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
                 turn_passed = True
             if event.type == pg.KEYDOWN and event.key == pg.K_LEFT: # Temp
-                instances[0].state_reserved = STATE_MOVL
+                if global_player_idx >= 0:
+                    instances[global_player_idx].state_reserved = STATE_MOVL
                 turn_passed = True
             if event.type == pg.KEYDOWN and event.key == pg.K_RIGHT: # Temp
-                instances[0].state_reserved = STATE_MOVR
+                if global_player_idx >= 0:
+                    instances[global_player_idx].state_reserved = STATE_MOVR
                 turn_passed = True
             if event.type == pg.KEYDOWN and event.key == pg.K_UP: # Temp
-                instances[0].state_reserved = STATE_MOVU
+                if global_player_idx >= 0:
+                    instances[global_player_idx].state_reserved = STATE_MOVU
                 turn_passed = True
             if event.type == pg.KEYDOWN and event.key == pg.K_DOWN: # Temp
-                instances[0].state_reserved = STATE_MOVD
+                if global_player_idx >= 0:
+                    instances[global_player_idx].state_reserved = STATE_MOVD
                 turn_passed = True
         scr.fill(COL_WHITE)
         text = f_b20.render("Turn:{}".format(global_turn), True, COL_BLACK)
         scr.blit(text, (20,cell_h*area_h+10))
         
-
+        # draw grid
         for xi,line in enumerate(area_resource):
             for yi, elem in enumerate(line):
                 pg.draw.polygon(scr, COL_BLACK, get_grid_rectange(xi,yi,0),4)
                 text = f_b20.render(str(area_resource[xi,yi]), True, COL_GREEN)
                 scr.blit(text, (xi*cell_w+5,yi*cell_h+5))
                 
+        # draw instances
         for ii, inst in enumerate(instances):
             pg.draw.polygon(scr,COL_RED,get_grid_rectange(inst.x,inst.y,3),3)
             text = f_b12.render(get_state_text(inst.state_reserved), True, COL_BLUE)
@@ -236,6 +277,7 @@ if __name__ == "__main__":
         
         pg.display.flip()
         
+        # handle turn pass
         if turn_passed:
             execute_turn()
             assign_state()

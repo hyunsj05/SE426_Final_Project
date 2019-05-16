@@ -15,7 +15,12 @@ STATE_MOVD = 4
 # STATE_ATKU = 7
 # STATE_ATKD = 8
 
-CONFIG_DEBUG_INSTANCE = True
+# Debug message level
+# -1: No debug message on console
+# -0: Print every debug message
+# 1~: Print debug level, lower means more frequent message
+CONFIG_DEBUG_MAIN = 1
+CONFIG_DEBUG_INSTANCE = 1
 
 CONFIG_INSTANCE_COUNT = 6
 CONFIG_PLAYER_ENABLE = True
@@ -36,5 +41,8 @@ CONFIG_CELL_H = 60
 
 CONFIG_RESOURCE_MAX = 10
 CONFIG_RESOURCE_SPAWN_METHOD = 0 # 0:Basic Method
-CONFIG_RESOURCE_SPAWN_RATE = 0.1
+CONFIG_RESOURCE_SPAWN_RATE = 0.04
+
+def print_config():
+    print("Config list")
 
