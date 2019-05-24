@@ -8,7 +8,6 @@ from game_util import *
 from config import *
 
 
-
 class Instance():
     def __init__(self, idx, initx, inity, controller = -1):
         self.idx = idx
@@ -33,19 +32,22 @@ class Instance():
     def __del__(self):
         self.print_message("DELETED",1)
 
+    # Check if it is alive
     def is_alive(self):
         return True if self.hp > 0 else False
 
-
+    # Prints basic information about instance
     def print_info(self, mode = 0):
         if mode == 0:
             print("    idx:%d, Controller:%d"%(self.idx, self.controller))
             print("    hp:%5d/%5d, dmg:%5d,%1.3f,%1.3f"%(self.hp, self.hp_max, self.dmg_base, self.dmg_coef_hp, self.dmg_coef_reflect))
 
+    # Prints debug message
     def print_message(self, msg = "", lv = 0):
         if CONFIG_DEBUG_INSTANCE == 0 or CONFIG_DEBUG_INSTANCE >= lv:
             print("Inst.%d: %s"%(self.idx,msg))
 
+    # Execute its turn
     def execute_turn(self, instances, area_resource, area_dim):
         if not self.is_alive():
             return None
@@ -87,8 +89,8 @@ class Instance():
             return None
         
         # Gain resource
-        self.hp+=area_resource[self.x,self.y]
-        area_resource[self.x,self.y] = 0
+        self.hp+=area_resource[self.y,self.x]
+        area_resource[self.y,self.x] = 0
         self.health_check()
 
         # Decay health
@@ -96,11 +98,13 @@ class Instance():
             self.hp -= self.hp_decay_value
         self.health_check()
 
+    # Cap health
     def health_check(self):
         if self.hp > self.hp_max:
             self.hp = self.hp_max
         elif self.hp <= 0:
             self.hp = 0 # Death
+
 
 def print_debug_main(msg ="", lv = 0):
     if CONFIG_DEBUG_MAIN == 0 or CONFIG_DEBUG_MAIN >= lv:
@@ -166,6 +170,10 @@ class Game():
 
     def execute_turn(self):  
         print_debug_main("Turn %d: Initiated"%(self.turn),1)
+        
+        # Assign states
+        for i in self.instances:
+            self.assign_state()
 
         # Shuffle order
         print_debug_main("Turn %d: Order shuffled"%(self.turn),3)
@@ -213,11 +221,35 @@ class Game():
     def return_state(self, idx):
         try: inst = self.instances[idx]
         except: print("Game: return_state: Instance error"); exit()
+        sight = 2
+        res_pad = np.zeros((self.area_w+2*sight, self.area_h+2*sight))
+        for w in range(self.area_w):
+            for h in range(self.area_h):
+                res_pad[sight+w,sight+h] = self.area_resource[w,h]/CONFIG_RESOURCE_MAX
+
         res_info = []
-
         enm_info = []
+        wall_info = []
+        for w in range(inst.y,inst.y+sight*2+1):
+            for h in range(inst.x,inst.x+sight*2+1):
+                if inst.y+sight == w and inst.x+sight == h: continue
+                res_info.append(res_pad[w,h])
 
-        inst_info = []
+        for x in range(inst.x-sight,inst.x+sight+1):
+            for y in range(inst.y-sight,inst.y+sight+1):
+                if x == inst.x and y == inst.y: continue
+                inp = False
+                for enm in self.instances:
+                    if x == enm.x and y == enm.y:
+                        enm_info.append(1.0-enm.hp/enm.hp_max)
+                        inp = True; break
+                if not inp:
+                    enm_info.append(1.0)
+                if x<0 or x>self.area_w or y<0 or y>self.area_h:
+                    wall_info.append(1)
+                else:
+                    wall_info.append(0)
+        inst_info = [inst.x/self.area_w, inst.y/self.area_h, inst.hp/inst.hp_max]
 
         return res_info + enm_info + inst_info
 
@@ -258,9 +290,9 @@ class Game():
             # draw grid
             for xi,line in enumerate(self.area_resource):
                 for yi, elem in enumerate(line):
-                    pg.draw.polygon(self.scr, COL_BLACK, get_grid_rectange(xi,yi,0),4)
+                    pg.draw.polygon(self.scr, COL_BLACK, get_grid_rectange(yi,xi,0),4)
                     text = self.f_b20.render(str(self.area_resource[xi,yi]), True, COL_GREEN)
-                    self.scr.blit(text, (xi*self.cell_w+5,yi*self.cell_h+5))
+                    self.scr.blit(text, (yi*self.cell_w+5,xi*self.cell_h+5))
                     
             # draw instances
             for ii, inst in enumerate(self.instances):
@@ -278,21 +310,7 @@ class Game():
             
             # handle turn pass
             if turn_passed:
+                print(self.return_state(0))
                 self.execute_turn()
-                self.assign_state()
 
-
-
-if __name__ == "__main__":
-    print("="*50)
-    print("Debug message level")
-    if CONFIG_DEBUG_MAIN >= 0:
-        print("    Global:", CONFIG_DEBUG_MAIN)
-    if CONFIG_DEBUG_INSTANCE >= 0:
-        print("    Instance:", CONFIG_DEBUG_INSTANCE)
-    print("="*50)
-    print_config()
-    print("="*50)
-    g = Game()
-    g.loop()
 
