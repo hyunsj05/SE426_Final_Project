@@ -2,11 +2,11 @@
 from config import *
 
 def get_state_text(ind):
-    if   ind==STATE_IDLE: return "IDLE"
-    elif ind==STATE_MOVL: return "MOVL"
-    elif ind==STATE_MOVR: return "MOVR"
-    elif ind==STATE_MOVU: return "MOVU"
-    elif ind==STATE_MOVD: return "MOVD"
+    if   ind==ACTION_IDLE: return "IDLE"
+    elif ind==ACTION_MOVL: return "MOVL"
+    elif ind==ACTION_MOVR: return "MOVR"
+    elif ind==ACTION_MOVU: return "MOVU"
+    elif ind==ACTION_MOVD: return "MOVD"
     # elif ind==STATE_ATKL: return "ATKL"
     # elif ind==STATE_ATKR: return "ATKR"
     # elif ind==STATE_ATKU: return "ATKU"
