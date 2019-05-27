@@ -3,40 +3,60 @@ import game
 from config import *
 from model import *
 
-if __name__ == "__main__":
+def print_config():
     print("="*50)
     print("Debug message level")
-    if CONFIG_DEBUG_MAIN >= 0:
-        print("    Global:", CONFIG_DEBUG_MAIN)
-    if CONFIG_DEBUG_GAME >= 0:
-        print("    Game:", CONFIG_DEBUG_GAME)
-    if CONFIG_DEBUG_INSTANCE >= 0:
-        print("    Instance:", CONFIG_DEBUG_INSTANCE)
+    print("    Main: %s"%(str(DEBUG_MAIN) if DEBUG_MAIN>=0 else "Off"))
+    print("    Game: %s"%(str(DEBUG_GAME) if DEBUG_GAME>=0 else "Off"))
+    print("    Inst: %s"%(str(DEBUG_INSTANCE) if DEBUG_INSTANCE>=0 else "Off"))
     print("="*50)
+    print("Experiment Setup")
+    print("="*50)
+    print("="*50)
+
+    print("="*50)
+    print("Agent Setup")
+    print("    Hidden Channel: %d, Batch size: %d"%(AGENT_HIDDEN_CHANNEL, AGENT_BATCH_SIZE))
+    print("    Memory Length: %d"%(AGENT_MEMORY_LENGTH))
+    print("    Is revivable?: %r, Revive cooltime: %d"%(AGENT_IS_REVIVABLE, AGENT_BASE_COOLTIME))
+    print("    EPS start/end/decay: %f, %f, %f"%(AGENT_EPS_START, AGENT_EPS_END, AGENT_EPS_DECAY))
+    print("    Gamma: %f, LR: %f"%(AGENT_GAMMA, AGENT_LR))
+    print("="*50)
+
+def printdm(msg ="", lv = 1):
+    if DEBUG_MAIN == 0 or DEBUG_MAIN >= lv:
+        print("Main:",msg)
+
+if __name__ == "__main__":
     print_config()
-    print("="*50)
     # statstics
     STAT_TURN = 0
 
     # game initialize
     g = game.Game()
+    printdm("Game Initiated",1)
 
     # Temp agent
     agents = list()
-    pl_count = 1 if CONFIG_PLAYER_ENABLE else 0
-    cpu_count = CONFIG_INSTANCE_COUNT - pl_count
+    pl_count = 1 if GAME_PLAYER_ENABLE else 0
+    cpu_count = GAME_INSTANCE_COUNT - pl_count
     for ind in range(cpu_count):
-        agent = Agent(ind, ind+pl_count, True, True, 10, len(g.return_state(0)), 256, 5)
+        agent = Agent(ind, ind+pl_count, True, AGENT_IS_REVIVABLE, AGENT_BASE_COOLTIME,
+                len(g.return_state(0)), AGENT_HIDDEN_CHANNEL, ACTION_COUNT,
+                AGENT_MEMORY_LENGTH,
+                AGENT_EPS_START, AGENT_EPS_END, AGENT_EPS_DECAY, AGENT_GAMMA, AGENT_LR, AGENT_BATCH_SIZE)
         agents.append(agent)
-        
+    printdm("%d Agent Created"%len(agents),1)
+
     # instance linking
     for inst in g.instances:
         inst.controller = inst.idx - pl_count
-        print("Main: Agent %d linked to Inst %d"%(inst.controller, inst.idx))
-    
+        printdm("Agent %d linked to Inst %d"%(inst.controller, inst.idx))
+
     # Main loop
     while not g.is_done:
-        g.turn_check = True
+        if g.automatic:
+            g.turn_check = True
         if g.turn_check:
             # Decrease cooltime
             for ag in agents:
@@ -48,7 +68,7 @@ if __name__ == "__main__":
                     ag.is_available = True
                     idx = g.instance_create(ag.idx)
                     ag.inst_assigned = idx
-                    print("Main: Agent %d linked to Inst %d"%(ag.idx, idx))
+                    printdm("Agent %d linked to Inst %d"%(ag.idx, idx))
 
             actions = list()
             states = list()
@@ -62,16 +82,16 @@ if __name__ == "__main__":
                     states.append(torch.FloatTensor([0]))
                     actions.append(-1)
 
-            
+
             # print(actions[0])
             # Should be changed
             next_states, rewards, is_deads = g.execute_turn(actions)
-            
+
             # Training
             for ind, ag in enumerate(agents):
                 if is_deads[ind] and ag.is_available == True:
-                    print("Main: agent %d disconnected from Inst %d"%(ag.idx, ag.inst_assigned))
-                    ag.inst_assigned = -1 
+                    printdm("Agent %d disconnected from Inst %d"%(ag.idx, ag.inst_assigned))
+                    ag.inst_assigned = -1
                     ag.is_available = False
                     if ag.is_revivable:
                         ag.cooltime = ag.cooltime_base
@@ -82,7 +102,12 @@ if __name__ == "__main__":
 
             # state = next_states[0]
             STAT_TURN += 1
+            if MAIN_PRINT_TURN_FREQUENCY >= 0 and STAT_TURN%MAIN_PRINT_TURN_FREQUENCY == 0:
+                printdm("Turn %d Passed"%STAT_TURN)
+            if STAT_TURN >= TEST_TURN_LENGTH:
+                g.is_done = True
 
-        g.clock.tick(60) #If simualtion is slow, touch this maybe...
+        g.clock.tick(TEST_STEP_PER_SECOND)
         g.draw()
 
+    printdm("Ending the simulation")

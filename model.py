@@ -1,28 +1,26 @@
-
+# Model.py
+# Containing deep-learning agent code
 
 # Source from https://github.com/keon/3-min-pytorch/blob/master/10-DQN-Learns-From-Environment/01-cartpole-dqn.py
+# Essentials
 import random, math
+import numpy as np
 
+# Importing torch
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
-import numpy as np
-# Import deque for learning
+# Import deque for memory
 from collections import deque
 
-EPISODES = 50
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200
-GAMMA = 0.8
-LR = 0.001
-BATCH_SIZE = 32
-
-
 class Agent:
-    def __init__(self, idx, inst_assigned, is_available, is_revivable,cooltime_base, in_channel, hid_channel, out_channel):
+    def __init__(self, 
+            idx, inst_assigned, is_available, is_revivable, cooltime_base, 
+            in_channel, hid_channel, out_channel,
+            memory_length,
+            eps_start, eps_end, eps_decay, gamma, lr, batch_size):
         self.model = nn.Sequential(
                 nn.Linear(in_channel, hid_channel),
                 nn.ReLU(),
@@ -30,9 +28,8 @@ class Agent:
                 nn.ReLU(),
                 nn.Linear(hid_channel, out_channel)
         )
-        self.num_states = out_channel
-        self.memory = deque(maxlen=10000)
-        self.optimizer = optim.Adam(self.model.parameters(), LR)
+        self.memory = deque(maxlen=memory_length)
+        self.optimizer = optim.Adam(self.model.parameters(), lr)
         self.steps_done = 0
 
         self.idx = idx
@@ -41,22 +38,30 @@ class Agent:
         self.is_revivable = is_revivable
         self.cooltime_base = cooltime_base
         self.cooltime = self.cooltime_base
+        self.num_actions = out_channel
+
+        self.eps_start = eps_start
+        self.eps_end = eps_end
+        self.eps_decay = eps_decay
+        self.gamma = gamma
+        self.lr = lr
+        self.batch_size = batch_size
 
     def act(self, state):
-        eps_threshold = EPS_END + (EPS_START - EPS_END)* math.exp(-1. * self.steps_done / EPS_DECAY)
+        eps_threshold = self.eps_end + (self.eps_start - self.eps_end)* math.exp(-1. * self.steps_done / self.eps_decay)
         self.steps_done += 1
         if random.random() > eps_threshold:
             return self.model(state).data.max(1)[1].view(1, 1)
         else:
-            return torch.LongTensor([[random.randrange(self.num_states)]])
+            return torch.LongTensor([[random.randrange(self.num_actions)]])
 
     def memorize(self, state, action, reward, next_state):
         self.memory.append((state, action, torch.FloatTensor([reward]), torch.FloatTensor([next_state])))
 
     def learn(self):
-        if len(self.memory) < BATCH_SIZE:
+        if len(self.memory) < self.batch_size:
             return None
-        batch = random.sample(self.memory, BATCH_SIZE)
+        batch = random.sample(self.memory, self.batch_size)
         states, actions, rewards, next_states = zip(*batch)
 
         states = torch.cat(states)
@@ -66,7 +71,7 @@ class Agent:
 
         current_q = self.model(states).gather(1, actions)
         max_next_q = self.model(next_states).detach().max(1)[0]
-        expected_q = rewards + (GAMMA * max_next_q)
+        expected_q = rewards + (self.gamma * max_next_q)
 
         loss = F.mse_loss (current_q.squeeze(), expected_q)
         self.optimizer.zero_grad()
