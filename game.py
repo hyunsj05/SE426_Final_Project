@@ -1,4 +1,3 @@
-
 import pygame as pg
 import numpy as np
 
@@ -7,12 +6,14 @@ import random
 from config import *
 from game_functions import *
 
+import matplotlib.pyplot as plt
 class Instance():
     def __init__(self, idx, initx, inity, controller = -1):
         self.idx = idx
         self.x = initx
         self.y = inity
-
+        self.hp_history=[]
+        self.attack_num=0
         self.hp = INSTANCE_HP_INITIAL
         self.hp_max = INSTANCE_HP_MAX
         self.hp_decay_mode = INSTANCE_DECAY_MODE
@@ -60,9 +61,9 @@ class Instance():
 
     # Execute its turn
     def execute_turn(self, instances, area_resource, area_wall, area_dim):
+        self.hp_history.append(self.hp)
         if not self.is_alive():
             return None
-
         self.survived_turn += 1
 
         # Move or attack
@@ -99,6 +100,7 @@ class Instance():
             self.y = target[1]
         # Attack Enemy
         elif isAttack:
+            self.attack_num+=1
             dmg = int(self.dmg_base + self.hp * self.dmg_per_hp)
             attackTarget.hp -= dmg
             self.hp -= int(dmg * attackTarget.dmg_per_reflect)
@@ -133,15 +135,14 @@ class Game():
     def __init__(self):
         # init pygame
         pg.init()
-
         # define game area
         self.size = [DRAW_CELL_WIDTH*GAME_AREA_WIDTH, DRAW_CELL_HEIGHT*GAME_AREA_HEIGHT+DRAW_CELL_HEIGHT]
         self.scr = pg.display.set_mode(self.size)
-
+        self.g_w=round((GAME_INSTANCE_COUNT+2)/2)
         # set basic fonts
         self.f_big = pg.font.SysFont("comicsansms", DRAW_FONT_SIZE_BIG)
         self.f_small = pg.font.SysFont("comicsansms", DRAW_FONT_SIZE_SMALL)
-
+        self.all_resource_history=[]
         pg.display.set_caption("Simulation")
 
         self.is_done = False
@@ -171,7 +172,6 @@ class Game():
         for instanceSpawnCounter in range(GAME_INSTANCE_COUNT-len(self.instances)):
             self.instance_create(controlidx)
             controlidx += 1
-
     # Prints debug message
     def printd(self, msg ="", lv = 0):
         if DEBUG_GAME == 0 or DEBUG_GAME >= lv:
@@ -249,7 +249,11 @@ class Game():
 
         # Increase turn
         self.turn += 1
-
+        all_resource=0
+        for i in range(GAME_AREA_HEIGHT):
+            for j in range(GAME_AREA_WIDTH):
+                all_resource+=self.area_resource[i,j]
+        self.all_resource_history.append(all_resource)
         # return next states - need to think about instance count
         res_reward = list()
         res_is_dead = list()
@@ -335,5 +339,28 @@ class Game():
             self.scr.blit(text, (inst.x*DRAW_CELL_WIDTH+20,inst.y*DRAW_CELL_HEIGHT+20))
             text = self.f_small.render(str(inst.controller), True, DRAW_COL_RED)
             self.scr.blit(text, (inst.x*DRAW_CELL_WIDTH+20,inst.y*DRAW_CELL_HEIGHT+30))
-
+        if (self.turn%GRID_GRAPH_TURN)==0:
+            plt.clf()
+            plt.subplots_adjust(hspace = 2, wspace = 0.6)
+            attack_list=[]
+            xlabel=[]
+            for i in range(len(self.instances)):
+                plt.subplot(self.g_w,2,i+1)
+                plt.xlabel("live turn: %s"%len(self.instances[i].hp_history))
+                plt.ylabel("hp")
+                plt.title("%d"%self.instances[i].idx)
+                plt.ylim(0, 100)
+                plt.plot(range(len(self.instances[i].hp_history)),self.instances[i].hp_history)
+                attack_list.append(self.instances[i].attack_num/len(self.instances[i].hp_history))
+                xlabel.append(self.instances[i].idx)
+            plt.subplot(self.g_w, 2, self.g_w*2-1)
+            plt.bar(range(len(attack_list)),attack_list)
+            plt.xticks(range(len(attack_list)),xlabel)
+            plt.title("aggression")
+            plt.subplot(self.g_w, 2, self.g_w*2)
+            plt.plot(range(self.turn), self.all_resource_history)
+            plt.title("all_resource_graph")
+            plt.xlabel("turn")
+            plt.show(block=False)
+            plt.pause(0.0000001)
         pg.display.flip()
