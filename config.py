@@ -1,4 +1,3 @@
-
 # Debug message level
 # -1: No debug message on console
 # -0: Print every debug message
@@ -9,11 +8,13 @@ DEBUG_GAME = -1
 DEBUG_AGENT = -1
 
 TEST_AUTOMATIC = True #Still, you can halt with <Space>
-TEST_STEP_PER_SECOND = 20
+TEST_STEP_PER_SECOND = 100
 TEST_SAVE_ENABLED = True
 TEST_SAVE_PATH = ""
 TEST_LOAD_ENABLED = False
 TEST_TURN_LENGTH = 5000
+
+GRID_GRAPH_TURN=99
 
 MAIN_PRINT_TURN_FREQUENCY = 500
 
